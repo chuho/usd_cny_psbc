@@ -1,11 +1,2 @@
-# 1. 检查状态，你会看到新文件和被修改的文件
-git status
-
-# 2. 将新文件和修改的文件添加到暂存区
-git add requirements.txt start-gaijin.py
-
-# 3. 提交更改
-git commit -m "Add requirements.txt and adapt script for GitHub Actions"
-
-# 4. 推送到GitHub
-git push
+requests
+pytz
