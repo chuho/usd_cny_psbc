@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV 数据查询工具 (日期范围)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; background-color: #f0f2f5; line-height: 1.6; }
+        .container { max-width: 950px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 25px; }
+        label { display: block; margin-top: 15px; margin-bottom: 6px; font-weight: 600; color: #4b5563; font-size: 0.9rem; }
+        select, button, input[type="date"] { padding: 12px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%; box-sizing: border-box; font-size: 1rem; background-color: #fff; }
+        input[type="date"]:invalid { color: #9ca3af; }
+        button { background-color: #3b82f6; color: white; cursor: pointer; transition: background-color 0.2s ease, box-shadow 0.2s ease; border: none; font-weight: 500; }
+        button:hover:not(:disabled) { background-color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        button:disabled { background-color: #e5e7eb; color: #9ca3af; cursor: not-allowed; opacity: 1; }
+        .date-range-container { display: flex; gap: 20px; align-items: flex-end; margin-bottom: 15px; }
+        .date-range-container > div { flex: 1; }
+        .date-range-container input[type="date"] { margin-bottom: 0; }
+        #statusInfo { margin-top: 15px; margin-bottom: 20px; font-style: normal; color: #4b5563; padding: 10px 15px; background-color: #f3f4f6; border-radius: 6px; border: 1px solid #e5e7eb; }
+        #resultsTableContainer { margin-top: 25px; max-height: 500px; overflow-y: auto; border: 1px solid #d1d5db; border-radius: 6px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px 15px; text-align: left; white-space: nowrap; }
+        th { background-color: #f9fafb; position: sticky; top: 0; z-index: 10; font-weight: 600; color: #374151; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        tbody tr:nth-child(even) { background-color: #f9fafb; }
+        tbody tr:hover { background-color: #f3f4f6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV 数据查询</h1>
+
+        <h2>数据状态</h2>
+        <p id="statusInfo">正在加载数据...</p>
+        <button id="reloadDataButton" disabled>重新加载数据</button>
+
+        <label for="ccyPairSelect">选择货币对 (ccyPair):</label>
+        <select id="ccyPairSelect" disabled>
+            <option value="">-- 等待数据加载 --</option>
+        </select>
+
+        <div class="date-range-container">
+            <div>
+                <label for="startDateInput">开始日期 (Start Date):</label>
+                <input type="date" id="startDateInput" disabled>
+            </div>
+            <div>
+                <label for="endDateInput">结束日期 (End Date):</label>
+                <input type="date" id="endDateInput" disabled>
+            </div>
+        </div>
+        <button id="queryButton" disabled>查询</button>
+
+        <h2>查询结果:</h2>
+        <div id="resultsTableContainer">
+            <p>等待数据加载完成并进行查询。</p>
+        </div>
+
+        <button id="exportButton" disabled>导出结果为 CSV</button>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const statusInfo = document.getElementById('statusInfo');
+        const reloadDataButton = document.getElementById('reloadDataButton');
+        const ccyPairSelect = document.getElementById('ccyPairSelect');
+        const startDateInput = document.getElementById('startDateInput');
+        const endDateInput = document.getElementById('endDateInput');
+        const queryButton = document.getElementById('queryButton');
+        const resultsTableContainer = document.getElementById('resultsTableContainer');
+        const exportButton = document.getElementById('exportButton');
+
+        // --- Global State Variables ---
+        let parsedData = [];
+        let filteredData = [];
+        let csvHeaders = [];
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', loadRemoteData);
+        reloadDataButton.addEventListener('click', loadRemoteData);
+        queryButton.addEventListener('click', handleQuery);
+        exportButton.addEventListener('click', handleExport);
+        
+        /**
+         * 从远程加载 CSV 文件
+         */
+        async function loadRemoteData() {
+            // ** 修改点: 使用相对路径来加载 CSV 文件 **
+            // 这使得它在任何域名下都能正常工作 (github.io 或您的自定义域名)
+            const csvUrl = 'data3.csv'; 
+            
+            resetUI();
+            statusInfo.textContent = `正在从 ${csvUrl} 加载数据... (版本: ${new Date().toLocaleTimeString()})`;
+            statusInfo.style.color = '#4b5563';
+
+            try {
+                const response = await fetch(csvUrl, { cache: "no-store" });
+                if (!response.ok) {
+                    throw new Error(`网络请求失败: ${response.status} ${response.statusText}`);
+                }
+                const csvText = await response.text();
+                
+                parseCSV(csvText);
+
+                if (parsedData.length > 0 && csvHeaders.length > 0) {
+                    populateSelectors();
+                    displayDataInfo();
+                    enableControls();
+                } else {
+                    throw new Error("成功获取文件，但无法解析或文件为空。请检查 data3.csv 的格式。");
+                }
+            } catch (error) {
+                console.error("加载或处理远程数据时出错:", error);
+                statusInfo.textContent = `错误: ${error.message}`;
+                statusInfo.style.color = 'red';
+                resetUI();
+            } finally {
+                reloadDataButton.disabled = false;
+            }
+        }
+        
+        // 其他 JavaScript 函数 (parseCSV, populateSelectors, 等) 保持不变...
+        // ... (此处省略其他函数以保持简洁，它们与上一版本完全相同)
+        function parseCSV(csvText) { const lines = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'); if (lines.length < 2) { parsedData = []; csvHeaders = []; console.warn("CSV文件行数不足（至少需要表头和一行数据）。"); return; } csvHeaders = lines[0].split(',').map(header => header.trim()); parsedData = []; if (!csvHeaders.includes('timestamp')) { console.warn("CSV 文件缺少 'timestamp' 列，日期范围过滤将不可用。");} for (let i = 1; i < lines.length; i++) { const line = lines[i].trim(); if (line === '') continue; const values = line.split(',').map(value => value.trim()); if (values.length === csvHeaders.length) { const entry = {}; let hasRequiredCols = true; csvHeaders.forEach((header, index) => { entry[header || `_col${index}`] = values[index]; }); if (typeof entry.ccyPair === 'undefined' || typeof entry.timestamp === 'undefined') { hasRequiredCols = false; } if (hasRequiredCols) { parsedData.push(entry); } } else { console.warn(`第 ${i+1} 行数据列数 (${values.length}) 与表头 (${csvHeaders.length}) 不匹配，已跳过。`); } } }
+        function populateSelectors() { if (!csvHeaders.includes('ccyPair')) { alert("内部错误: 缺少 'ccyPair' 列，无法填充选择器。"); resetUI(); return; } const uniquePairs = [...new Set(parsedData.map(item => item.ccyPair).filter(Boolean))].sort(); ccyPairSelect.innerHTML = '<option value="">-- 所有货币对 --</option>'; uniquePairs.forEach(pair => { const option = document.createElement('option'); option.value = pair; option.textContent = pair; ccyPairSelect.appendChild(option); }); }
+        function displayDataInfo() { if (parsedData.length > 0) { const latestTimestamp = parsedData.reduce((latest, current) => { return (current.timestamp && current.timestamp > latest) ? current.timestamp : latest; }, parsedData[0].timestamp || ''); if (latestTimestamp) { statusInfo.textContent = `数据加载成功！最新数据时间: ${latestTimestamp} | 共 ${parsedData.length} 条记录`; } else { statusInfo.textContent = `数据加载成功！(${parsedData.length} 条记录)，但未找到有效的时间戳。`; } } else { statusInfo.textContent = `数据加载成功，但文件中没有有效记录。`; } }
+        function enableControls() { ccyPairSelect.disabled = false; startDateInput.disabled = false; endDateInput.disabled = false; queryButton.disabled = false; reloadDataButton.disabled = false; }
+        function resetUI() { statusInfo.textContent = '请稍候...'; ccyPairSelect.innerHTML = '<option value="">-- 等待数据加载 --</option>'; ccyPairSelect.disabled = true; startDateInput.value = ''; endDateInput.value = ''; startDateInput.disabled = true; endDateInput.disabled = true; queryButton.disabled = true; exportButton.disabled = true; reloadDataButton.disabled = true; resultsTableContainer.innerHTML = '<p>等待数据加载完成并进行查询。</p>'; }
+        function handleQuery() { const selectedPair = ccyPairSelect.value; const startDate = startDateInput.value; const endDate = endDateInput.value; if (startDate && endDate && startDate > endDate) { alert("查询错误：结束日期不能早于开始日期。"); return; } if ((startDate || endDate) && !csvHeaders.includes('timestamp')) { alert("查询警告：CSV 文件缺少 'timestamp' 列，无法按日期范围过滤。将仅按货币对过滤。"); } filteredData = parsedData.filter(item => { const pairMatch = !selectedPair || item.ccyPair === selectedPair; let dateMatch = true; if ((startDate || endDate) && csvHeaders.includes('timestamp')) { if (typeof item.timestamp === 'string' && item.timestamp.length >= 10) { const itemDate = item.timestamp.substring(0, 10); const startMatch = !startDate || itemDate >= startDate; const endMatch = !endDate || itemDate <= endDate; dateMatch = startMatch && endMatch; } else { dateMatch = false; } } return pairMatch && dateMatch; }); displayResults(filteredData); exportButton.disabled = filteredData.length === 0; }
+        function displayResults(data) { resultsTableContainer.innerHTML = ''; if (!Array.isArray(data) || data.length === 0) { resultsTableContainer.innerHTML = '<p>没有找到匹配的记录。</p>'; return; } if (csvHeaders.length === 0) { resultsTableContainer.innerHTML = '<p>错误：无法显示结果，缺少表头信息。</p>'; return; } const table = document.createElement('table'); const thead = table.createTHead(); const headerRow = thead.insertRow(); csvHeaders.forEach(headerText => { const th = document.createElement('th'); th.textContent = headerText; headerRow.appendChild(th); }); const tbody = table.createTBody(); data.forEach(item => { const row = tbody.insertRow(); csvHeaders.forEach(header => { const cell = row.insertCell(); const value = item[header]; cell.textContent = (value !== undefined && value !== null) ? value : ''; }); }); resultsTableContainer.appendChild(table); }
+        function handleExport() { if (filteredData.length === 0) { alert("没有可导出的数据。"); return; } const startDateStr = startDateInput.value ? `_from_${startDateInput.value}` : ''; const endDateStr = endDateInput.value ? `_to_${endDateInput.value}` : ''; const pairStr = ccyPairSelect.value ? `_${ccyPairSelect.value.replace('/', '_')}` : ''; const filename = `filtered_results${pairStr}${startDateStr}${endDateStr}_${Date.now()}.csv`; exportToCSV(filteredData, filename); }
+        function exportToCSV(data, filename) { if (csvHeaders.length === 0) { alert("无法导出：未找到表头信息。"); return; } const csvRows = []; csvRows.push(csvHeaders.map(header => `"${String(header).replace(/"/g, '""')}"`).join(',')); data.forEach(row => { const values = csvHeaders.map(header => { let value = (row[header] !== undefined && row[header] !== null) ? String(row[header]) : ''; if (/[",\n\r]/.test(value)) { value = `"${value.replace(/"/g, '""')}"`; } return value; }); csvRows.push(values.join(',')); }); const csvString = csvRows.join('\n'); const blob = new Blob(["\ufeff" + csvString], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute('href', url); link.setAttribute('download', filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); } else { alert('您的浏览器不支持自动下载。'); } }
+    </script>
+</body>
+</html>
