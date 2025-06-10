@@ -9,11 +9,26 @@
         .container { max-width: 950px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1, h2 { color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 25px; }
         label { display: block; margin-top: 15px; margin-bottom: 6px; font-weight: 600; color: #4b5563; font-size: 0.9rem; }
-        select, button, input[type="date"] { padding: 12px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%; box-sizing: border-box; font-size: 1rem; background-color: #fff; }
+        select, button, input[type="date"], .btn-download { /* Added .btn-download */
+            padding: 12px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%; box-sizing: border-box; font-size: 1rem; background-color: #fff;
+        }
         input[type="date"]:invalid { color: #9ca3af; }
-        button { background-color: #3b82f6; color: white; cursor: pointer; transition: background-color 0.2s ease, box-shadow 0.2s ease; border: none; font-weight: 500; }
-        button:hover:not(:disabled) { background-color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        button, .btn-download { /* Added .btn-download */
+            background-color: #3b82f6; color: white; cursor: pointer; transition: background-color 0.2s ease, box-shadow 0.2s ease; border: none; font-weight: 500; text-align: center; /* Center text for <a> tag */
+        }
+        button:hover:not(:disabled), .btn-download:hover { /* Added .btn-download */
+            background-color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
         button:disabled { background-color: #e5e7eb; color: #9ca3af; cursor: not-allowed; opacity: 1; }
+        /* Style for the new download button */
+        .btn-download {
+            display: block; /* Make <a> tag behave like a button */
+            text-decoration: none; /* Remove underline from link */
+            background-color: #10b981; /* A different color (green) to distinguish it */
+        }
+        .btn-download:hover {
+            background-color: #059669; /* Darker green on hover */
+        }
         .date-range-container { display: flex; gap: 20px; align-items: flex-end; margin-bottom: 15px; }
         .date-range-container > div { flex: 1; }
         .date-range-container input[type="date"] { margin-bottom: 0; }
@@ -29,6 +44,9 @@
 <body>
     <div class="container">
         <h1>CSV 数据查询</h1>
+
+        <!-- ** 新增的下载按钮 ** -->
+        <a href="data3.csv" download="data3.csv" class="btn-download">下载完整原始数据 (data3.csv)</a>
 
         <h2>数据状态</h2>
         <p id="statusInfo">正在加载数据...</p>
@@ -85,8 +103,7 @@
          * 从远程加载 CSV 文件
          */
         async function loadRemoteData() {
-            // ** 修改点: 使用相对路径来加载 CSV 文件 **
-            // 这使得它在任何域名下都能正常工作 (github.io 或您的自定义域名)
+            // 使用相对路径来加载 CSV 文件
             const csvUrl = 'data3.csv'; 
             
             resetUI();
@@ -119,7 +136,7 @@
             }
         }
         
-        // 其他 JavaScript 函数 (parseCSV, populateSelectors, 等) 保持不变...
+        // 其他 JavaScript 函数 (parseCSV, populateSelectors, etc.) 保持不变
         // ... (此处省略其他函数以保持简洁，它们与上一版本完全相同)
         function parseCSV(csvText) { const lines = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'); if (lines.length < 2) { parsedData = []; csvHeaders = []; console.warn("CSV文件行数不足（至少需要表头和一行数据）。"); return; } csvHeaders = lines[0].split(',').map(header => header.trim()); parsedData = []; if (!csvHeaders.includes('timestamp')) { console.warn("CSV 文件缺少 'timestamp' 列，日期范围过滤将不可用。");} for (let i = 1; i < lines.length; i++) { const line = lines[i].trim(); if (line === '') continue; const values = line.split(',').map(value => value.trim()); if (values.length === csvHeaders.length) { const entry = {}; let hasRequiredCols = true; csvHeaders.forEach((header, index) => { entry[header || `_col${index}`] = values[index]; }); if (typeof entry.ccyPair === 'undefined' || typeof entry.timestamp === 'undefined') { hasRequiredCols = false; } if (hasRequiredCols) { parsedData.push(entry); } } else { console.warn(`第 ${i+1} 行数据列数 (${values.length}) 与表头 (${csvHeaders.length}) 不匹配，已跳过。`); } } }
         function populateSelectors() { if (!csvHeaders.includes('ccyPair')) { alert("内部错误: 缺少 'ccyPair' 列，无法填充选择器。"); resetUI(); return; } const uniquePairs = [...new Set(parsedData.map(item => item.ccyPair).filter(Boolean))].sort(); ccyPairSelect.innerHTML = '<option value="">-- 所有货币对 --</option>'; uniquePairs.forEach(pair => { const option = document.createElement('option'); option.value = pair; option.textContent = pair; ccyPairSelect.appendChild(option); }); }
